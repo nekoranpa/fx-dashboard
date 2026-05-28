@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FX Trading Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+:root {
+  --bg: #0a0a0f;
+  --bg2: #111118;
+  --bg3: #1a1a24;
+  --border: rgba(255,255,255,0.08);
+  --border2: rgba(255,255,255,0.14);
+  --text: #e8e8f0;
+  --text2: #8888a0;
+  --text3: #555568;
+  --green: #00e5a0;
+  --green-dim: rgba(0,229,160,0.12);
+  --red: #ff4d6a;
+  --red-dim: rgba(255,77,106,0.12);
+  --amber: #ffb340;
+  --amber-dim: rgba(255,179,64,0.12);
+  --blue: #4d9fff;
+  --blue-dim: rgba(77,159,255,0.12);
+  --font-mono: 'DM Mono', monospace;
+  --font-sans: 'Syne', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: var(--font-sans); min-height: 100vh; }
+
+.grid-bg {
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background-image: linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.app { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 2.5rem; padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.logo { display: flex; align-items: center; gap: 12px; }
+.logo-icon {
+  width: 36px; height: 36px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--green), var(--blue));
+  display: flex; align-items: center; justify-content: center; font-size: 18px;
+}
+.logo-text { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
+.logo-sub { font-size: 12px; color: var(--text3); font-family: var(--font-mono); margin-top: 1px; }
+
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+.last-update { font-size: 12px; color: var(--text3); font-family: var(--font-mono); }
+.refresh-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--border2); background: var(--bg3);
+  color: var(--text2); font-size: 13px; font-family: var(--font-sans);
+  transition: all 0.15s;
+}
+.refresh-btn:hover { border-color: var(--green); color: var(--green); }
+.refresh-btn svg { transition: transform 0.5s; }
+.refresh-btn.spinning svg { animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+@media (max-width: 700px) { .metrics { grid-template-columns: repeat(2, 1fr); } }
+
+.metric {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 1.25rem;
+  transition: border-color 0.2s;
+}
+.metric:hover { border-color: var(--border2); }
+.metric-label { font-size: 11px; color: var(--text3); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+.metric-val { font-size: 28px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; }
+.metric-val.green { color: var(--green); }
+.metric-val.red { color: var(--red); }
+.metric-val.amber { color: var(--amber); }
+.metric-val.blue { color: var(--blue); }
+.metric-sub { font-size: 12px; color: var(--text3); margin-top: 6px; font-family: var(--font-mono); }
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+@media (max-width: 700px) { .grid2 { grid-template-columns: 1fr; } }
+
+.card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 1.25rem;
+}
+.card-title {
+  font-size: 13px; font-weight: 500; color: var(--text2);
+  font-family: var(--font-mono); text-transform: uppercase;
+  letter-spacing: 0.06em; margin-bottom: 1rem;
+  display: flex; align-items: center; justify-content: space-between;
+}
+
+.scenario-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.scenario-item:last-child { border-bottom: none; }
+.scenario-name { font-size: 14px; color: var(--text); }
+.scenario-meta { font-size: 11px; color: var(--text3); font-family: var(--font-mono); margin-top: 3px; }
+
+.toggle-wrap { display: flex; align-items: center; gap: 8px; }
+.toggle-label { font-size: 11px; font-family: var(--font-mono); }
+.toggle-label.on { color: var(--green); }
+.toggle-label.off { color: var(--text3); }
+.toggle {
+  width: 38px; height: 22px; border-radius: 11px; cursor: pointer;
+  border: none; position: relative; transition: background 0.2s;
+}
+.toggle.on { background: var(--green); }
+.toggle.off { background: var(--border2); }
+.toggle::after {
+  content: ''; position: absolute; width: 16px; height: 16px;
+  border-radius: 50%; background: white; top: 3px; transition: left 0.2s;
+}
+.toggle.on::after { left: 19px; }
+.toggle.off::after { left: 3px; }
+
+.badge {
+  font-size: 11px; padding: 3px 8px; border-radius: 4px;
+  font-family: var(--font-mono); font-weight: 500;
+}
+.badge.success { background: var(--green-dim); color: var(--green); }
+.badge.error { background: var(--red-dim); color: var(--red); }
+.badge.warning { background: var(--amber-dim); color: var(--amber); }
+.badge.info { background: var(--blue-dim); color: var(--blue); }
+
+.log-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.log-table th {
+  text-align: left; padding: 8px; color: var(--text3);
+  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.05em;
+}
+.log-table td { padding: 10px 8px; border-bottom: 1px solid var(--border); color: var(--text); font-family: var(--font-mono); font-size: 12px; }
+.log-table tr:last-child td { border-bottom: none; }
+.log-table tr:hover td { background: var(--bg3); }
+
+.filter-tabs { display: flex; gap: 6px; }
+.ftab {
+  font-size: 11px; padding: 4px 10px; border-radius: 4px; cursor: pointer;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--text3); font-family: var(--font-mono); transition: all 0.15s;
+}
+.ftab.active { border-color: var(--green); color: var(--green); background: var(--green-dim); }
+
+.error-banner {
+  background: var(--red-dim); border: 1px solid rgba(255,77,106,0.3);
+  border-radius: 8px; padding: 12px 16px; margin-bottom: 1rem;
+  display: none; align-items: center; gap: 10px; font-size: 13px; color: var(--red);
+}
+
+.loading { display: flex; align-items: center; justify-content: center; padding: 2rem; gap: 10px; color: var(--text3); font-size: 13px; font-family: var(--font-mono); }
+.spinner { width: 16px; height: 16px; border: 2px solid var(--border2); border-top-color: var(--green); border-radius: 50%; animation: spin 0.8s linear infinite; }
+
+.pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green); margin-right: 6px; animation: pulse 2s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+.chart-legend { display: flex; gap: 16px; margin-bottom: 12px; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text3); font-family: var(--font-mono); }
+.legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="grid-bg"></div>
+<div class="app">
+  <div class="topbar">
+    <div class="logo">
+      <div class="logo-icon">⚡</div>
+      <div>
+        <div class="logo-text">FX Trading Monitor</div>
+        <div class="logo-sub">TradingView → Make → PineConnector → MT5</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="last-update" id="lastUpdate">—</div>
+      <button class="refresh-btn" id="refreshBtn" onclick="fetchAll()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+          <path d="M3 3v5h5"/>
+        </svg>
+        更新
+      </button>
+    </div>
+  </div>
+
+  <div class="error-banner" id="errorBanner">
+    ⚠ <span id="errorMsg"></span>
+  </div>
+
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-label">シナリオ数</div>
+      <div class="metric-val blue" id="m-scenarios">—</div>
+      <div class="metric-sub" id="m-scenarios-sub">読み込み中</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">本日の実行</div>
+      <div class="metric-val green" id="m-runs">—</div>
+      <div class="metric-sub" id="m-runs-sub">読み込み中</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">クレジット残</div>
+      <div class="metric-val amber" id="m-credits">—</div>
+      <div class="metric-sub" id="m-credits-sub">読み込み中</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">エラー率</div>
+      <div class="metric-val" id="m-errorrate">—</div>
+      <div class="metric-sub" id="m-errorrate-sub">読み込み中</div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">
+        <span><span class="pulse"></span>シナリオ状態</span>
+      </div>
+      <div id="scenarioList"><div class="loading"><div class="spinner"></div>読み込み中...</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">実行グラフ（7日間）</div>
+      <div class="chart-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#00e5a0;"></div>成功</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ff4d6a;"></div>エラー</div>
+      </div>
+      <div style="position:relative; height:160px;">
+        <canvas id="execCanvas" role="img" aria-label="過去7日間の実行履歴"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">
+      <span>実行ログ</span>
+      <div class="filter-tabs">
+        <button class="ftab active" id="f-all" onclick="filterLogs('all')">すべて</button>
+        <button class="ftab" id="f-success" onclick="filterLogs('success')">成功</button>
+        <button class="ftab" id="f-error" onclick="filterLogs('error')">エラー</button>
+      </div>
+    </div>
+    <div id="logTableWrap"><div class="loading"><div class="spinner"></div>読み込み中...</div></div>
+  </div>
+</div>
+
+<script>
+const API_TOKEN = 'b6bff573-6e52-4ef8-9fba-45fe911b35ee';
+const TEAM_ID = '2356760';
+const BASE = 'https://us2.make.com/api/v2';
+const H = { 'Authorization': `Token ${API_TOKEN}`, 'Content-Type': 'application/json' };
+
+let allLogs = [];
+let execChart = null;
+
+async function api(path) {
+  const r = await fetch(`${BASE}${path}`, { headers: H });
+  if (!r.ok) throw new Error(`${r.status}`);
+  return r.json();
+}
+
+function showError(msg) {
+  const b = document.getElementById('errorBanner');
+  b.style.display = 'flex';
+  document.getElementById('errorMsg').textContent = msg;
+}
+function hideError() { document.getElementById('errorBanner').style.display = 'none'; }
+
+function fmtDate(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  return `${(dt.getMonth()+1).toString().padStart(2,'0')}/${dt.getDate().toString().padStart(2,'0')} ${dt.getHours().toString().padStart(2,'0')}:${dt.getMinutes().toString().padStart(2,'0')}`;
+}
+
+function badge(s) {
+  if (s === 'success') return '<span class="badge success">成功</span>';
+  if (s === 'error' || s === 'failed') return '<span class="badge error">エラー</span>';
+  if (s === 'warning') return '<span class="badge warning">警告</span>';
+  return `<span class="badge info">${s}</span>`;
+}
+
+async function fetchScenarios() {
+  const data = await api(`/scenarios?teamId=${TEAM_ID}`);
+  const list = data.scenarios || [];
+  document.getElementById('m-scenarios').textContent = list.length;
+  document.getElementById('m-scenarios-sub').textContent = `${list.filter(s=>s.isActive).length}件アクティブ`;
+
+  if (!list.length) {
+    document.getElementById('scenarioList').innerHTML = '<div class="loading">シナリオなし</div>';
+    return;
+  }
+  document.getElementById('scenarioList').innerHTML = list.map(s => `
+    <div class="scenario-item">
+      <div>
+        <div class="scenario-name">${s.name || s.id}</div>
+        <div class="scenario-meta">更新: ${fmtDate(s.lastEdit)}</div>
+      </div>
+      <div class="toggle-wrap">
+        <span class="toggle-label ${s.isActive ? 'on' : 'off'}">${s.isActive ? 'ON' : 'OFF'}</span>
+        <button class="toggle ${s.isActive ? 'on' : 'off'}" onclick="toggleScenario(${s.id}, ${s.isActive})" aria-label="${s.name}を切り替え"></button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function fetchLogs() {
+  const data = await api(`/scenarios/logs?teamId=${TEAM_ID}&limit=100`);
+  const logs = data.scenarioLogs || [];
+  allLogs = logs;
+
+  const today = new Date().toDateString();
+  const todayLogs = logs.filter(l => new Date(l.started).toDateString() === today);
+  const errors = todayLogs.filter(l => l.status === 'error' || l.status === 'failed');
+  const errRate = todayLogs.length > 0 ? Math.round(errors.length / todayLogs.length * 100) : 0;
+
+  document.getElementById('m-runs').textContent = todayLogs.length;
+  document.getElementById('m-runs-sub').textContent = `${logs.length}件総計`;
+  document.getElementById('m-errorrate').textContent = errRate + '%';
+  document.getElementById('m-errorrate').className = `metric-val ${errRate > 20 ? 'red' : errRate > 0 ? 'amber' : 'green'}`;
+  document.getElementById('m-errorrate-sub').textContent = `${errors.length}件エラー`;
+
+  renderLogs(logs);
+  renderChart(logs);
+}
+
+function renderLogs(logs) {
+  if (!logs.length) {
+    document.getElementById('logTableWrap').innerHTML = '<div class="loading">ログなし</div>';
+    return;
+  }
+  document.getElementById('logTableWrap').innerHTML = `
+    <table class="log-table">
+      <thead><tr><th>時刻</th><th>シナリオ</th><th>状態</th><th>操作数</th><th>データ</th></tr></thead>
+      <tbody>${logs.slice(0,30).map(l => `
+        <tr>
+          <td>${fmtDate(l.started)}</td>
+          <td>${l.scenarioName || l.scenarioId || '—'}</td>
+          <td>${badge(l.status)}</td>
+          <td>${l.operations || 0}</td>
+          <td>${l.dataTransfer ? (l.dataTransfer / 1024).toFixed(1) + ' KB' : '—'}</td>
+        </tr>
+      `).join('')}</tbody>
+    </table>`;
+}
+
+function filterLogs(type) {
+  ['all','success','error'].forEach(t => {
+    document.getElementById(`f-${t}`).className = `ftab${t === type ? ' active' : ''}`;
+  });
+  const f = type === 'all' ? allLogs
+    : type === 'success' ? allLogs.filter(l => l.status === 'success')
+    : allLogs.filter(l => l.status === 'error' || l.status === 'failed');
+  renderLogs(f);
+}
+
+function renderChart(logs) {
+  const days = [], succ = [], errs = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    days.push(`${d.getMonth()+1}/${d.getDate()}`);
+    const ds = d.toDateString();
+    const dl = logs.filter(l => new Date(l.started).toDateString() === ds);
+    succ.push(dl.filter(l => l.status === 'success').length);
+    errs.push(dl.filter(l => l.status === 'error' || l.status === 'failed').length);
+  }
+  if (execChart) execChart.destroy();
+  execChart = new Chart(document.getElementById('execCanvas'), {
+    type: 'bar',
+    data: {
+      labels: days,
+      datasets: [
+        { label: '成功', data: succ, backgroundColor: '#00e5a0', borderRadius: 3, stack: 'a' },
+        { label: 'エラー', data: errs, backgroundColor: '#ff4d6a', borderRadius: 3, stack: 'a' }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { stacked: true, grid: { display: false }, ticks: { color: '#555568', font: { size: 11, family: 'DM Mono' } } },
+        y: { stacked: true, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#555568', font: { size: 11, family: 'DM Mono' }, stepSize: 1 } }
+      }
+    }
+  });
+}
+
+async function fetchCredits() {
+  try {
+    const data = await api(`/teams/${TEAM_ID}`);
+    const used = data.team?.usedCapacity || 0;
+    const total = data.team?.totalCapacity || 10000;
+    const remain = total - used;
+    document.getElementById('m-credits').textContent = remain.toLocaleString();
+    document.getElementById('m-credits-sub').textContent = `/ ${total.toLocaleString()} total`;
+  } catch {
+    document.getElementById('m-credits').textContent = '—';
+    document.getElementById('m-credits-sub').textContent = 'API確認中';
+  }
+}
+
+async function toggleScenario(id, isActive) {
+  try {
+    await fetch(`${BASE}/scenarios/${id}`, {
+      method: 'PATCH', headers: H,
+      body: JSON.stringify({ isActive: !isActive })
+    });
+    await fetchScenarios();
+  } catch { showError('切り替えに失敗しました'); }
+}
+
+async function fetchAll() {
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+  hideError();
+  try {
+    await Promise.all([fetchScenarios(), fetchLogs(), fetchCredits()]);
+    document.getElementById('lastUpdate').textContent = '更新: ' + new Date().toLocaleTimeString('ja-JP');
+  } catch(e) {
+    showError('データ取得エラー: ' + e.message);
+  } finally {
+    btn.classList.remove('spinning');
+  }
+}
+
+fetchAll();
+setInterval(fetchAll, 60000);
+</script>
+</body>
+</html>
